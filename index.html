@@ -1,192 +1,277 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Крестики-нолики с ИИ</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: linear-gradient(135deg, #1e1e2f, #3a3a5f);
-            color: white;
-        }
+<meta charset="UTF-8">
+<title>Продвинутые крестики-нолики</title>
 
-        h1 {
-            margin-top: 30px;
-        }
+<style>
+:root {
+    --bg: #1e1e2f;
+    --cell: #2e2e4f;
+    --hover: #4e4e8f;
+    --text: white;
+}
 
-        #board {
-            display: grid;
-            grid-template-columns: repeat(3, 100px);
-            gap: 5px;
-            justify-content: center;
-            margin-top: 30px;
-        }
+body {
+    margin: 0;
+    font-family: Arial;
+    text-align: center;
+    background: var(--bg);
+    color: var(--text);
+}
 
-        .cell {
-            width: 100px;
-            height: 100px;
-            font-size: 40px;
-            background-color: #2e2e4f;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            border-radius: 10px;
-            transition: 0.2s;
-        }
+h1 { margin-top: 20px; }
 
-        .cell:hover {
-            background-color: #4e4e8f;
-        }
+.controls {
+    margin: 15px;
+}
 
-        button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 10px;
-            border: none;
-            cursor: pointer;
-        }
-    </style>
+select, button {
+    padding: 8px;
+    margin: 5px;
+    border-radius: 8px;
+    border: none;
+}
+
+#board {
+    display: grid;
+    grid-template-columns: repeat(3, 100px);
+    gap: 5px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.cell {
+    width: 100px;
+    height: 100px;
+    font-size: 40px;
+    background: var(--cell);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: 0.2s;
+}
+
+.cell:hover {
+    background: var(--hover);
+}
+
+.theme-light {
+    --bg: #f4f4f4;
+    --cell: #ffffff;
+    --hover: #ddd;
+    --text: black;
+}
+
+.theme-neon {
+    --bg: black;
+    --cell: #111;
+    --hover: #0ff;
+    --text: #0ff;
+}
+</style>
 </head>
 <body>
 
-<h1>Крестики-нолики против ИИ</h1>
-<h2 id="status">Твой ход (X)</h2>
+<h1>Крестики-нолики 2.0</h1>
 
+<div class="controls">
+    Сложность:
+    <select id="difficulty">
+        <option value="easy">Лёгкий</option>
+        <option value="medium">Средний</option>
+        <option value="hard">Сложный</option>
+        <option value="learning">Самообучающийся</option>
+    </select>
+
+    Тема:
+    <select id="theme">
+        <option value="">Тёмная</option>
+        <option value="theme-light">Светлая</option>
+        <option value="theme-neon">Неон</option>
+    </select>
+
+    <button onclick="restart()">Новая игра</button>
+</div>
+
+<h2 id="status">Твой ход</h2>
 <div id="board"></div>
 
-<button onclick="restartGame()">Новая игра</button>
-
 <script>
-    const boardElement = document.getElementById("board");
-    const statusText = document.getElementById("status");
+const boardEl = document.getElementById("board");
+const statusEl = document.getElementById("status");
+const difficultySelect = document.getElementById("difficulty");
+const themeSelect = document.getElementById("theme");
 
-    let board = ["", "", "", "", "", "", "", "", ""];
-    let gameOver = false;
+let board = Array(9).fill("");
+let gameOver = false;
 
-    function createBoard() {
-        boardElement.innerHTML = "";
-        board.forEach((cell, index) => {
-            const div = document.createElement("div");
-            div.classList.add("cell");
-            div.innerText = cell;
-            div.addEventListener("click", () => playerMove(index));
-            boardElement.appendChild(div);
-        });
+let memory = JSON.parse(localStorage.getItem("aiMemory") || "{}");
+
+function saveMemory() {
+    localStorage.setItem("aiMemory", JSON.stringify(memory));
+}
+
+function drawBoard() {
+    boardEl.innerHTML = "";
+    board.forEach((cell, i) => {
+        const div = document.createElement("div");
+        div.className = "cell";
+        div.innerText = cell;
+        div.onclick = () => playerMove(i);
+        boardEl.appendChild(div);
+    });
+}
+
+function playerMove(i) {
+    if (board[i] || gameOver) return;
+    board[i] = "X";
+    drawBoard();
+
+    if (checkWinner("X")) return endGame("Ты победил!");
+
+    if (isDraw()) return endGame("Ничья!");
+
+    setTimeout(aiMove, 300);
+}
+
+function aiMove() {
+    let difficulty = difficultySelect.value;
+
+    let move;
+    if (difficulty === "easy") {
+        move = randomMove();
+    } 
+    else if (difficulty === "medium") {
+        move = Math.random() < 0.5 ? randomMove() : bestMove();
+    } 
+    else if (difficulty === "hard") {
+        move = bestMove();
+    } 
+    else {
+        move = learningMove();
     }
 
-    function playerMove(index) {
-        if (board[index] !== "" || gameOver) return;
+    board[move] = "O";
+    drawBoard();
 
-        board[index] = "X";
-        createBoard();
+    if (checkWinner("O")) return endGame("ИИ победил!");
+    if (isDraw()) return endGame("Ничья!");
 
-        if (checkWinner(board, "X")) {
-            statusText.innerText = "Ты победил!";
-            gameOver = true;
-            return;
-        }
+    statusEl.innerText = "Твой ход";
+}
 
-        if (isDraw()) {
-            statusText.innerText = "Ничья!";
-            gameOver = true;
-            return;
-        }
+function randomMove() {
+    let empty = board.map((v,i)=>v===""?i:null).filter(v=>v!==null);
+    return empty[Math.floor(Math.random()*empty.length)];
+}
 
-        statusText.innerText = "Ход ИИ...";
-        setTimeout(aiMove, 500);
-    }
-
-    function aiMove() {
-        let bestScore = -Infinity;
-        let move;
-
-        for (let i = 0; i < 9; i++) {
-            if (board[i] === "") {
-                board[i] = "O";
-                let score = minimax(board, 0, false);
-                board[i] = "";
-                if (score > bestScore) {
-                    bestScore = score;
-                    move = i;
-                }
+function bestMove() {
+    let bestScore = -Infinity;
+    let move;
+    for (let i=0;i<9;i++) {
+        if (!board[i]) {
+            board[i] = "O";
+            let score = minimax(board, 0, false);
+            board[i] = "";
+            if (score > bestScore) {
+                bestScore = score;
+                move = i;
             }
         }
-
-        board[move] = "O";
-        createBoard();
-
-        if (checkWinner(board, "O")) {
-            statusText.innerText = "ИИ победил!";
-            gameOver = true;
-            return;
-        }
-
-        if (isDraw()) {
-            statusText.innerText = "Ничья!";
-            gameOver = true;
-            return;
-        }
-
-        statusText.innerText = "Твой ход (X)";
     }
+    return move;
+}
 
-    function minimax(board, depth, isMaximizing) {
-        if (checkWinner(board, "O")) return 10 - depth;
-        if (checkWinner(board, "X")) return depth - 10;
-        if (isDraw()) return 0;
+function minimax(b, depth, isMax) {
+    if (checkWinner("O")) return 10-depth;
+    if (checkWinner("X")) return depth-10;
+    if (isDraw()) return 0;
 
-        if (isMaximizing) {
-            let bestScore = -Infinity;
-            for (let i = 0; i < 9; i++) {
-                if (board[i] === "") {
-                    board[i] = "O";
-                    let score = minimax(board, depth + 1, false);
-                    board[i] = "";
-                    bestScore = Math.max(score, bestScore);
-                }
+    if (isMax) {
+        let best=-Infinity;
+        for (let i=0;i<9;i++){
+            if(!b[i]){
+                b[i]="O";
+                best=Math.max(best,minimax(b,depth+1,false));
+                b[i]="";
             }
-            return bestScore;
-        } else {
-            let bestScore = Infinity;
-            for (let i = 0; i < 9; i++) {
-                if (board[i] === "") {
-                    board[i] = "X";
-                    let score = minimax(board, depth + 1, true);
-                    board[i] = "";
-                    bestScore = Math.min(score, bestScore);
-                }
+        }
+        return best;
+    } else {
+        let best=Infinity;
+        for (let i=0;i<9;i++){
+            if(!b[i]){
+                b[i]="X";
+                best=Math.min(best,minimax(b,depth+1,true));
+                b[i]="";
             }
-            return bestScore;
+        }
+        return best;
+    }
+}
+
+function learningMove() {
+    let state = board.join("");
+    let moves = memory[state];
+
+    if (moves) {
+        let sorted = Object.entries(moves).sort((a,b)=>b[1]-a[1]);
+        for (let [pos] of sorted) {
+            if (!board[pos]) return parseInt(pos);
         }
     }
 
-    function checkWinner(board, player) {
-        const winPatterns = [
-            [0,1,2],[3,4,5],[6,7,8],
-            [0,3,6],[1,4,7],[2,5,8],
-            [0,4,8],[2,4,6]
-        ];
-        return winPatterns.some(pattern =>
-            pattern.every(index => board[index] === player)
-        );
-    }
+    return randomMove();
+}
 
-    function isDraw() {
-        return board.every(cell => cell !== "");
-    }
+function learn(result) {
+    if (difficultySelect.value !== "learning") return;
 
-    function restartGame() {
-        board = ["", "", "", "", "", "", "", "", ""];
-        gameOver = false;
-        statusText.innerText = "Твой ход (X)";
-        createBoard();
-    }
+    let state = board.join("");
+    if (!memory[state]) memory[state] = {};
 
-    createBoard();
+    board.forEach((cell, i) => {
+        if (cell === "O") {
+            memory[state][i] = (memory[state][i] || 0) + (result==="win"?2:result==="draw"?1:-1);
+        }
+    });
+
+    saveMemory();
+}
+
+function checkWinner(player) {
+    const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    return wins.some(w=>w.every(i=>board[i]===player));
+}
+
+function isDraw() {
+    return board.every(c=>c);
+}
+
+function endGame(msg) {
+    statusEl.innerText = msg;
+    gameOver = true;
+
+    if (msg.includes("ИИ победил")) learn("win");
+    else if (msg.includes("Ничья")) learn("draw");
+    else learn("lose");
+}
+
+function restart() {
+    board = Array(9).fill("");
+    gameOver = false;
+    statusEl.innerText = "Твой ход";
+    drawBoard();
+}
+
+themeSelect.onchange = () => {
+    document.body.className = themeSelect.value;
+};
+
+drawBoard();
 </script>
-
 </body>
 </html>
